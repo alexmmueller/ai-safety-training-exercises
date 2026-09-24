@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "model_name": "Qwen/Qwen3-0.6B",
+  "layer": -1,
+  "device": "cpu",
+  "probe_weights_path": "probes/placeholder_probe.json",
+  "score_threshold_log_level": 0.0
+}

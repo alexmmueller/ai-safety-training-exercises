@@ -152,3 +152,66 @@ it) -- it's needing zero training-data construction effort and having no
 equivalent blind spot for genuinely ambiguous, work-adjacent-sounding
 topics, which is the harder problem synthetic data scaling doesn't
 fully solve.
+
+## 8. `hermes-plugins/local_activation_probe/` -- white-box deception probing on a local open-weight model, live in an agent loop
+
+A general-purpose Hermes plugin that reads a **local open-weight model's
+internal activations** during real agent use and scores them against a
+linear probe for deception/misalignment signals -- implementing the
+mainline methodology of Apollo Research's ["Detecting Strategic
+Deception Using Linear Probes"](https://arxiv.org/abs/2502.03407)
+(arXiv:2502.03407, read in full, not summarized secondhand -- see
+`hermes-plugins/local_activation_probe/README.md` for exact quotes and
+section references).
+
+**Model-agnostic and probe-agnostic**: point it at any HuggingFace
+model, train your own probe on your own labeled examples. Implements
+the paper's actual primary method (logistic regression, L2
+regularized), per-token normalization, and mean-over-all-tokens
+aggregation -- not a simplified approximation of the paper, closed gap
+by gap and logged honestly where an earlier draft got the methodology
+wrong (see the plugin's own verification log for the correction trail).
+
+**Getting a working local activation-extraction pipeline running on
+Apple Silicon took real debugging**, documented start to finish:
+vLLM's native `extract_hidden_states` is CUDA-only in practice (a
+`NotImplementedError` from `vllm-metal`'s own source, confirmed
+directly); NNsight segfaults on MPS but works cleanly on CPU (confirmed
+reproducibly); MPS activations themselves were checked and found
+numerically trustworthy before ruling MPS out for the segfault reason
+specifically, not assumed either way.
+
+**New experiment beyond the paper**: an out-of-distribution
+generalization test across five domains the probe never trained on
+(logistics, healthcare, aviation, weather, corporate finance). Real
+result: the simpler difference-of-means baseline nearly failed on a
+held-out finance example (score -1.494, close to crossing into "honest"
+territory) while logistic regression kept a healthy margin (+0.600) on
+the identical example -- genuine mechanistic evidence, not just a
+citation, for the paper's own finding that logistic regression is the
+more robust method.
+
+See `hermes-plugins/local_activation_probe/README.md` for the full
+methodology comparison table, all three new experiments with real
+numbers, and the paper's own documented failure modes (spurious
+correlation with morality, aggregation failures on partially-deceptive
+responses) quoted directly.
+
+Also includes `hermes-plugins/observability_bridge/` -- an earlier,
+simpler Hermes plugin logging tool-call activity for the
+rule-based-approver thesis this repo's other exercises build toward.
+
+## 9. `docker-sandbox/` -- running Hermes itself inside Docker, with a real, logged architecture decision trail
+
+Explores containerized/sandboxed execution options for a Hermes agent
+(rather than the default native-process execution) as a concrete step
+toward the observability-harness thesis: an agent that can't escape its
+own sandbox is a precondition for trusting any monitor built around it.
+`docker-sandbox/docs/ARCHITECTURE.md` and `RISKS.md` capture the design
+reasoning; `docker-sandbox/docs/VERIFICATION.md` is the full session-log
+of what was actually run and checked (including one architecture
+decision that was revisited and corrected after further investigation --
+kept in the log rather than silently edited out). `docker-sandbox/compose/`
+has the actual `docker-compose.yml`; `docker-sandbox/probe_sidecar/` is a
+sketch for wiring the activation-probe plugin above into a sidecar
+container rather than running in-process.

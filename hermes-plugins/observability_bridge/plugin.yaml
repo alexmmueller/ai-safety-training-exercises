@@ -1,0 +1,12 @@
+name: observability_bridge
+version: 1.0.0
+description: >
+  Observe-only pre_tool_call/post_tool_call logger for the Hermes Secure
+  Sandbox project. Never blocks, modifies, or approves — appends JSONL
+  records of every tool call to a shared log for a downstream correlator
+  to diff against AgentSight's independent kernel-level event log. See
+  ../../docker-sandbox/docs/ARCHITECTURE.md for the full design.
+author: Alex M. Müller
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
