@@ -22,9 +22,8 @@ judge, tested against synthetic on-task/off-task agent trajectories.
 | v3 | 630 | 95.6% (360 held-out) | `ontask-classifier/V3_RESULTS.md` |
 | v4 (final) | 1,980 | **98.0%** (1,080 held-out) | `ontask-classifier/V4_RESULTS.md` |
 
-Read `V4_RESULTS.md` first for the full table and final conclusion. The
-other docs are kept as-is (with inline corrections noted) to show how
-the investigation actually progressed, including a wrong turn.
+Read `V4_RESULTS.md` for the full table and final numbers. Other docs
+kept as-is with inline corrections noted.
 
 ### A1. `boolq-eval/` -- Inspect AI eval infra
 
@@ -104,8 +103,7 @@ keying on tool name as a shortcut (same content, different tool
 wrappers) plus a larger 216-example held-out set.
 
 **Result:** near-random, bimodal behavior on novel phrasing -- not one
-clean, fixable shortcut. Working conclusion at this point ("doesn't
-reliably generalize at all") was itself too strong -- corrected in A6-A7.
+clean, fixable shortcut.
 
 **Reproduce:** `cd ontask-classifier && python diagnostic_and_expanded_test.py`
 
@@ -125,12 +123,10 @@ training examples (up from 630).
 **Result:** 1058/1080 (98.0%) held-out drift catch rate. Two residual,
 explainable failures remain (work-adjacent-sounding subjects).
 
-**Conclusion:** a small LoRA fine-tune on DistilBERT reaches ~98%
-generalization to novel semantic drift, but needs ~8x more data than an
-afternoon-scale exercise provides. The LLM judge's advantage isn't
-ceiling accuracy (the classifier matches it) -- it's zero
-training-data-construction effort and no blind spot on ambiguous,
-work-adjacent topics.
+**Comparison to LLM judge (A3):** classifier accuracy matches the
+judge's, using ~8x more training data than v1's original scale; the
+judge needs no training-data construction but costs a live model call
+per decision.
 
 **Reproduce:** `cd ontask-classifier && python retrain_v4_final.py`
 
@@ -205,14 +201,11 @@ approves.
 
 ### B3. `docker-sandbox/` -- running Hermes inside Docker
 
-Architecture and risk docs plus a compose skeleton for containerized
-Hermes execution -- a precondition for trusting any monitor (A or B)
-built around an agent that could otherwise escape its own sandbox.
-`docker-sandbox/docs/ARCHITECTURE.md` and `RISKS.md` cover the design;
-`docker-sandbox/docs/VERIFICATION.md` logs everything actually run and
-checked, including one architecture decision that was revisited and
-corrected (kept in the log, not edited out). `docker-sandbox/probe_sidecar/`
-is a sketch for running B1 as a sidecar container instead of in-process.
+Architecture/risk docs and a compose skeleton for containerized Hermes
+execution. `docker-sandbox/docs/ARCHITECTURE.md` and `RISKS.md` cover
+the design; `docker-sandbox/docs/VERIFICATION.md` logs what's actually
+been run and checked. `docker-sandbox/probe_sidecar/` is a sketch for
+running B1 as a sidecar container instead of in-process.
 
 **Reproduce:** `cd docker-sandbox/compose && docker compose up` --
 unverified/skeleton as of `docs/VERIFICATION.md`, check there first.
