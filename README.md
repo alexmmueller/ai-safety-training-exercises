@@ -160,14 +160,6 @@ normalization, mean-over-all-tokens aggregation. Model-agnostic and
 probe-agnostic -- point it at any HuggingFace model, train your own
 probe.
 
-Getting local activation extraction working on Apple Silicon required
-real debugging: vLLM's native `extract_hidden_states` is CUDA-only in
-practice (confirmed via a direct `NotImplementedError` in
-`vllm-metal`'s own source); NNsight segfaults on MPS but works on CPU
-(confirmed reproducibly); MPS activation values themselves were checked
-against CPU and found numerically correct before ruling MPS out for the
-segfault specifically.
-
 **New experiment:** out-of-distribution test across five domains the
 probe never trained on (logistics, healthcare, aviation, weather,
 finance). Difference-of-means nearly failed on a held-out finance
