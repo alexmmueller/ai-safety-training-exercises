@@ -140,24 +140,28 @@ per decision.
 
 **Reproduce:** `cd ontask-classifier && python retrain_v4_final.py`
 
-### A8. Open-weight CoT monitor (pilot, honest limitations)
+### A8. Open-weight CoT monitor (pilot -- corrected, weaker result than first reported)
 
-See `cot-monitor/README.md`. Built a chain-of-thought monitor against
-OPEN-WEIGHT reasoning models (DeepSeek-R1 via Ollama), motivated by the
-fact that hosted APIs (Anthropic, OpenAI) deliberately withhold raw CoT --
-both expose only a provider-generated summary. Confirmed empirically that
-Ollama exposes genuine, unfiltered raw CoT with no summarization step.
+See `cot-monitor/README.md` for the full writeup, including a correction
+made after re-reading the raw trace closely. Built a chain-of-thought
+monitor against OPEN-WEIGHT reasoning models (DeepSeek-R1 via Ollama),
+motivated by the fact that hosted APIs (Anthropic, OpenAI) deliberately
+withhold raw CoT -- both expose only a provider-generated summary.
+Confirmed empirically that Ollama exposes genuine, unfiltered raw CoT
+with no summarization step.
 
-Ran a first pilot experiment measuring whether monitor-relevant reasoning
-signal survives summarization (using a second local model as a stand-in
-summarizer). **Honest result: only 1 flag fired across 4 designed
-scenarios (using a small 1.5B reasoning model), and it did not survive
-summarization -- but the sample is too small to report a reliable
-"survival rate," and reading the raw traces shows the small model mostly
-didn't engage with the scenarios' embedded ethical/scope tension at all.**
-Reported as: a working, reproducible pipeline + one illustrative case, not
-a completed measurement. Honest next step (larger reasoning model,
-redesigned scenarios) documented, not yet done.
+Ran a pilot experiment across 4 designed scenarios (using a small 1.5B
+reasoning model). **Corrected honest result: the one flag that initially
+fired was a false positive** -- a keyword pattern matched the phrase
+"other agent(s)" used in an ordinary file-permissions context, not real
+agent-to-agent coordination. Reading the raw traces shows the small model
+did not meaningfully engage with the designed ethical/scope tension in
+any of the 4 scenarios. This pilot demonstrates a working, reproducible
+pipeline and one useful negative finding (this model size doesn't
+reliably engage with this scenario complexity) -- it does NOT demonstrate
+CoT signal loss under summarization, which was the original hypothesis.
+Honest next steps (tighten the flag patterns, use a larger reasoning
+model, redesign scenarios to force engagement) documented, not yet done.
 
 **Reproduce:**
 ```bash
