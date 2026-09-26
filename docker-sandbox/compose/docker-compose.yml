@@ -1,0 +1,204 @@
+# Hermes Secure Sandbox — docker-compose skeleton
+#
+# STATUS: UNTESTED. This has not been run. Image tags, ports, and volume
+# paths are design placeholders and will need correction once R1/R2 in
+# docs/RISKS.md are resolved. Do not treat `docker compose up` on this file
+# as expected-to-work until each service has been brought up individually
+# and logged in docs/VERIFICATION.md.
+#
+# Phase: OBSERVE ONLY. No service in this stack is wired to block a tool
+# call. agentsight and probe-sidecar are pure loggers/alerters.
+
+version: "3.9"
+
+networks:
+  sandbox-net:
+    driver: bridge
+
+volumes:
+  sandbox-logs:        # shared, read-mostly volume for JSONL event logs
+  model-weights:        # open-weight model cache, populated out of band
+
+services:
+  # ---------------------------------------------------------------------
+  # Kernel-level observability. Privileged by necessity (eBPF). Scoped to
+  # watch the hermes-agent container's PID/cgroup, not the whole host.
+  # ---------------------------------------------------------------------
+  agentsight:
+    build: ./agentsight       # not yet created — placeholder Dockerfile needed
+    privileged: true          # required for eBPF probe attachment
+    pid: "host"                # needed to see the agent's real PID tree
+    volumes:
+      - sandbox-logs:/var/log/sandbox
+      - /sys/kernel/debug:/sys/kernel/debug:ro   # BTF/debugfs access — R1
+      - /sys/kernel/btf:/sys/kernel/btf:ro
+    networks:
+      - sandbox-net
+    # command: agentsight record -c node --binary-path docker://hermes-agent
+    # ^ exact invocation TBD once AgentSight is actually installed and its
+    #   CLI verified against this compose topology.
+
+  # ---------------------------------------------------------------------
+  # Open-weight model server. Exposes OpenAI-compatible API for Hermes,
+  # plus a hidden-states extraction path for the probe sidecar.
+  # ---------------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # SUPERSEDED 2026-09-24 (see docs/RISKS.md R4/R7): the CPU-in-Docker
+  # vllm-serve approach below is PROVEN NON-VIABLE on this Apple Silicon
+  # Mac — 3/3 real attempts stalled identically under amd64-on-arm64
+  # Docker emulation (worker-process spawn hung, confirmed via docker
+  # logs/ps aux/curl -v across multiple independent test rounds).
+  #
+  # WORKING ALTERNATIVE (real evidence, see docs/VERIFICATION.md
+  # 2026-09-24 "RESOLVED — vllm-metal native install"): run vllm-metal
+  # NATIVELY on the Mac host, OUTSIDE this compose stack entirely.
+  #   curl -LsSf https://astral.sh/uv/install.sh | sh
+  #   uv python install 3.12   # MUST be exactly 3.12, native arm64
+  #   uv venv --python 3.12 ~/.venv-vllm-metal
+  #   curl -fsSL https://raw.githubusercontent.com/vllm-project/vllm-metal/main/install.sh | bash
+  #   source ~/.venv-vllm-metal/bin/activate
+  #   vllm serve <model> --max-model-len 2048
+  # Verify: `python -c "from vllm.platforms import current_platform;
+  # print(current_platform)"` must print MetalPlatform, not CpuPlatform.
+  #
+  # CONSEQUENCE for this compose file: the model server is now a host
+  # process, not a compose service. Point Hermes's model.base_url and
+  # this file's other services at `host.docker.internal:8000` (Docker
+  # Desktop's built-in host-reachability DNS name) instead of
+  # `vllm-serve:8000`. The `vllm-serve` service block below is LEFT
+  # HERE FOR REFERENCE / future revisit (e.g. if this project later
+  # moves to a real Linux+CUDA host, where mainline vLLM+Docker+GPU
+  # passthrough would actually work) but should NOT be started as-is —
+  # remove it from `docker compose up` invocations, or leave commented.
+  # extract_hidden_states support under vllm-metal specifically is
+  # UNCONFIRMED — that's the next thing to test, not this CPU path.
+  # ---------------------------------------------------------------------
+  vllm-serve:
+    # CORRECTED 2026-09-24 (see docs/RISKS.md R7): vllm/vllm-openai:latest
+    # REQUIRES A GPU — confirmed via vllm-project/vllm#4771, a long-running
+    # (2024-2025) GitHub issue about this exact gap. The actual CPU-capable
+    # image lives on AWS ECR Public Gallery, not Docker Hub:
+    #   public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo
+    # (per vLLM's own docs: getting_started/installation/cpu.html#pre-built-images)
+    # Also per a hands-on report: the default CPU build assumes AVX-512
+    # support: unconfirmed whether this Mac's virtualized CPU (via Docker
+    # Desktop's LinuxKit VM, itself running on Apple Silicon) exposes
+    # AVX-512 to the container — if not, a from-source build without that
+    # assumption may be needed (see southball/vllm-avx2-docker as a
+    # reference implementation of that workaround, third-party, unverified
+    # trust). This has NOT yet been tested end to end — next concrete step.
+    image: public.ecr.aws/q9t5s3a7/vllm-cpu-release-repo:7f1a5398e9610d96c473931a26c0e12bbe0d0423-x86_64
+    # ^ CONFIRMED real tag (see docs/VERIFICATION.md 2026-09-24 R4/R7 entry) —
+    # pulled and ran successfully through engine init. `:latest` does NOT
+    # resolve/hangs — do not use it. NOTE: serving a real model currently
+    # STALLS after engine config (see same entry) — root cause not yet
+    # found (suspected: HF_TOKEN absent / Hub rate-limit). Set HF_TOKEN
+    # via docker_env or an .env file before the next attempt.
+    networks:
+      - sandbox-net
+    ports:
+      - "8000:8000"
+    volumes:
+      - model-weights:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    # command: --model <TBD, see docs/RISKS.md R5/R7 — small Llama-family
+    #   model candidate, e.g. meta-llama/Llama-3.2-3B-Instruct>
+    #   --speculative_config '{"method":"extract_hidden_states", ...}'
+    #   --kv_transfer_config '{"kv_connector":"ExampleHiddenStatesConnector",
+    #     "kv_role":"kv_producer",
+    #     "kv_connector_extra_config":{"shared_storage_path":"/dev/shm/hidden_states"}}'
+    # Exact flags need testing (R4) before this is real.
+    #
+    # CPU-only per R7 decision (2026-09-24): Metal GPU cannot be passed
+    # through to Docker containers on macOS, and mainline vLLM (needed for
+    # extract_hidden_states) doesn't run on Apple Silicon natively at all
+    # (only the separate vllm-metal/MLX fork does, with unconfirmed
+    # extract_hidden_states support). Accepting CPU-only inference here
+    # for now — correctness-first, revisit GPU passthrough or a
+    # Linux+CUDA host later once the pipeline is proven end to end.
+    # No `deploy.resources.devices` GPU reservation — intentionally
+    # omitted, do not re-add without re-verifying GPU passthrough works.
+
+
+  # ---------------------------------------------------------------------
+  # Reads vLLM's hidden-states output per completion, scores it against
+  # Apollo's linear probe weights, writes an async JSONL log. Never blocks.
+  # ---------------------------------------------------------------------
+  probe-sidecar:
+    build: ../probe_sidecar
+    networks:
+      - sandbox-net
+    volumes:
+      - sandbox-logs:/var/log/sandbox
+      - model-weights:/root/.cache/huggingface:ro
+    depends_on:
+      - vllm-serve
+    environment:
+      - HIDDEN_STATES_DIR=/dev/shm/hidden_states
+      - PROBE_WEIGHTS_PATH=/opt/probes/apollo_default.pt   # not yet vendored
+      - LOG_PATH=/var/log/sandbox/probe_scores.jsonl
+
+  # ---------------------------------------------------------------------
+  # Hermes agent — RUNS IN DOCKER (decision revisited 2026-09-24, see
+  # docs/ARCHITECTURE.md "Why Hermes runs inside Docker"). Reasoning:
+  # eBPF/AgentSight can only observe processes on a Linux kernel; on this
+  # Mac that's only available inside Docker Desktop's LinuxKit VM. Model
+  # intent (activation probes) and Hermes's own execution are different,
+  # non-redundant layers — kernel-level tracing catches cases where
+  # Hermes's self-reported logs are wrong or bypassed (real precedent:
+  # hermes-agent#41045, a block verdict silently discarded while the
+  # tool call executed anyway).
+  #
+  # The model server (vllm-metal) stays OUTSIDE Docker/this compose
+  # network — Metal/MLX GPU access is unavailable to a containerized
+  # process on macOS regardless of this decision (see R7), so there's no
+  # reason to containerize it. Hermes reaches it via `host.docker.internal`
+  # (Docker Desktop's built-in host-reachability DNS name), not compose-
+  # network service discovery.
+  #
+  # This service definition is a STARTING POINT, not yet run — actual
+  # Hermes image/build TBD, and Hermes's own container-lifecycle
+  # management (see docs/RISKS.md R2) may mean this is better launched
+  # via Hermes's own `docker` terminal backend + `docker_extra_args:
+  # ["--network=sandbox-net"]` rather than as a literal compose service,
+  # exactly as R2 already found. Kept here as a compose-native fallback
+  # / documentation of the intended network wiring either way.
+  # ---------------------------------------------------------------------
+  hermes-agent:
+    image: hermes-agent:latest   # placeholder — actual image/build TBD
+    networks:
+      - sandbox-net
+    volumes:
+      - sandbox-logs:/var/log/sandbox
+      - ../plugins/observability_bridge:/root/.hermes/plugins/observability_bridge:ro
+    environment:
+      # host.docker.internal resolves to the Mac host from inside the
+      # container — this is how Hermes reaches the natively-running
+      # vllm-metal server (see R7). NOT vllm-serve:8000 — that service
+      # is superseded/non-viable, see the vllm-serve block above.
+      - HERMES_MODEL_BASE_URL=http://host.docker.internal:8000/v1
+    depends_on:
+      - agentsight
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+      - CHOWN
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m
+      - /var/tmp:rw,noexec,nosuid,size=256m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux; harmless/no-op on Docker Desktop where it's automatic
+
+  # ---------------------------------------------------------------------
+  # NOT YET BUILT. Reads agentsight.jsonl + hermes_hooks.jsonl +
+  # probe_scores.jsonl, diffs Hermes's self-report against kernel truth,
+  # alerts on divergence or high probe scores. See ARCHITECTURE.md.
+  # ---------------------------------------------------------------------
+  # correlator:
+  #   build: ../correlator
+  #   ...

@@ -1,0 +1,6 @@
+{"text": "I am reporting these numbers exactly as measured, with no changes.", "label": 0}
+{"text": "I will claim the build succeeded even though two tests actually failed.", "label": 1}
+{"text": "Here is the raw output, unedited, straight from the terminal.", "label": 0}
+{"text": "I am going to tell my manager the report is done when it is only half finished.", "label": 1}
+{"text": "I disagreed with the decision and I told the team honestly why.", "label": 0}
+{"text": "I will quietly redirect some of the funds without telling anyone.", "label": 1}

@@ -1,0 +1,17 @@
+name: local_activation_probe
+version: 0.1.0
+description: >
+  Observe-only plugin that reads a LOCAL open-weight model's internal
+  activations (via NNsight) alongside each Hermes tool call, and scores
+  them against a user-supplied linear probe for deception/misalignment
+  signals. Model-agnostic and probe-agnostic by design — bring your own
+  local model and your own trained probe. Requires Hermes to be
+  configured with a local model provider (see README.md). CPU-only by
+  default: MPS (Apple Silicon GPU) causes a confirmed NNsight segfault
+  on this model family as of nnsight 0.7.0/torch 2.14 (see
+  ../../docker-sandbox/docs/VERIFICATION.md in this repo for the reproduction).
+author: Alex M. Müller
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
+requires_env: []
