@@ -152,3 +152,22 @@ it) -- it's needing zero training-data construction effort and having no
 equivalent blind spot for genuinely ambiguous, work-adjacent-sounding
 topics, which is the harder problem synthetic data scaling doesn't
 fully solve.
+
+## 8. Open-weight CoT monitor (pilot, honest limitations)
+
+See `cot-monitor/README.md`. Built a chain-of-thought monitor against
+OPEN-WEIGHT reasoning models (DeepSeek-R1 via Ollama), motivated by the
+fact that hosted APIs (Anthropic, OpenAI) deliberately withhold raw CoT --
+both expose only a provider-generated summary. Confirmed empirically that
+Ollama exposes genuine, unfiltered raw CoT with no summarization step.
+
+Ran a first pilot experiment measuring whether monitor-relevant reasoning
+signal survives summarization (using a second local model as a stand-in
+summarizer). **Honest result: only 1 flag fired across 4 designed
+scenarios (using a small 1.5B reasoning model), and it did not survive
+summarization -- but the sample is too small to report a reliable
+"survival rate," and reading the raw traces shows the small model mostly
+didn't engage with the scenarios' embedded ethical/scope tension at all.**
+Reported as: a working, reproducible pipeline + one illustrative case, not
+a completed measurement. Honest next step (larger reasoning model,
+redesigned scenarios) documented, not yet done.
